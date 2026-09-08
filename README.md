@@ -8,39 +8,51 @@ documents/words/occurrences so they can later be searched.
 
 ## How it works
 
-- `Crawler` walks a directory recursively and, for each `.txt` file:
-  - extracts the set of words in the file (`Tokenizer.Tokenize` +
-    `TextNormalizer.Fold` from the `SearchUtilities` package),
-  - assigns each new word an id,
-  - inserts the document, the new words, and the word/document occurrences
-    into an `IDatabase`.
-- `IDatabase` is the storage abstraction, with two implementations:
-  - `MockDatabase` - an in-memory stand-in used until a real Postgres server
-    is provisioned.
-  - `DatabasePostgres` - stores documents, words and occurrences in
-    PostgreSQL (via `Npgsql`), (re)creating the schema on startup.
-- `App.Run()` wires a database into a `Crawler`, indexes all `.txt` files
-  under the folder configured in `Config.FOLDER`, and prints a short summary
-  (document count, number of distinct words, first few words indexed).
-- `Renamer` is a small helper that can recursively rename files in a folder
-  so they end in `.txt`.
+- `Application/IndexingService` is the single use case: it pulls documents from
+  an `IDocumentSource`, and for each one assigns new words an id and writes the
+  document, the new words, and the word/document occurrences to an `IIndexStore`.
+  Tokenization uses `Tokenizer.Tokenize` + `TextNormalizer.Fold` from the
+  `SearchUtilities` package.
+- It is invoked through `IIndexingService.Reindex()`. `Program.cs` is one caller
+  (a manual console run); a future trigger - "enough documents uploaded", a
+  scheduled batch update, an ops "reindex now" call - would be another adapter
+  calling the same method, without touching the domain.
+- `IIndexStore` is the storage port, with two implementations in
+  `Infrastructure/Persistence/`:
+  - `SqliteIndexStore` (default) - stores documents, words and occurrences in a
+    local SQLite file (via `Microsoft.Data.Sqlite`), (re)creating the schema on
+    startup. The file lives in `searchv2/db/` (see `SearchDatabase`) and is the
+    same file SearchAPI reads.
+  - `InMemoryIndexStore` - an in-memory stand-in that touches no disk.
+- `IDocumentSource` is the crawl port; `FileSystemDocumentSource` walks
+  `IndexerOptions.Folder` recursively for files matching `IndexerOptions.Extensions`.
+
+## Architecture
+
+Onion architecture; dependencies point inward only:
+
+| Layer | Folder | Contents |
+|-------|--------|----------|
+| Core | `Core/` | Domain entities (`IndexedDocument`, `SourceDocument`, `IndexStatistics`) and ports (`IIndexStore`, `IDocumentSource`). No framework dependencies. |
+| Application | `Application/` | The `IndexingService` use case and its `IIndexingService` interface. Depends only on Core. |
+| Infrastructure | `Infrastructure/` | Adapters behind the Core ports: `SqliteIndexStore`, `InMemoryIndexStore`, `FileSystemDocumentSource`, `IndexerOptions`, `SearchDatabase`, plus DI wiring. |
+| Entry point | `Program.cs` | Composition root: builds the DI container and calls `IIndexingService.Reindex()`. |
 
 ## Requirements
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- A PostgreSQL server, if you want to run against `DatabasePostgres` instead
-  of the in-memory `MockDatabase`.
+
+No database server is needed - `SqliteIndexStore` writes a self-contained file to
+`searchv2/db/`.
 
 ## Setup
 
-The project depends on the `SearchUtilities` package. Until it is published
-to nuget.org, it is restored from a local NuGet feed configured in
-`NuGet.config`, which points at `../search-utilities/nupkg`. Clone the
-`search-utilities` repository as a sibling of this repository and build its
-package before restoring `indexer`, or update `NuGet.config` once
-`SearchUtilities` is published for real.
-
-Restore and build:
+The project depends on the `SearchUtilities` package. Until it is published to
+nuget.org, it is restored from a local NuGet feed configured in `NuGet.config`,
+which points at `../search-utilities/nupkg`. Clone the `search-utilities`
+repository as a sibling of this repository and build its package before
+restoring `indexer`, or update `NuGet.config` once `SearchUtilities` is
+published for real.
 
 ```bash
 dotnet restore
@@ -49,17 +61,17 @@ dotnet build
 
 ## Usage
 
-1. Set the folder to index by editing `Config.FOLDER` in `Config.cs` (all
-   `.txt` files under that folder, including subfolders, will be indexed).
-2. Choose a database in `App.cs`: `MockDatabase` (default, in-memory) or
-   `DatabasePostgres` (set the connection string via `Paths.POSTGRES_DATABASE`
-   from `SearchUtilities`).
+1. Set the folder to index in `Infrastructure/IndexerOptions.cs` (all files
+   matching `Extensions`, under `Folder` and its subfolders, are indexed).
+2. Optionally override the SQLite file location with the `SEARCH_DB_PATH`
+   environment variable (default: `searchv2/db/searchmedium.db`), or switch the
+   store in `Infrastructure/DependencyInjection.cs` to `InMemoryIndexStore`.
 3. Run the indexer:
 
    ```bash
    dotnet run
    ```
 
-   This crawls `Config.FOLDER`, indexes every `.txt` file, and prints the
-   number of documents indexed, the number of distinct words found, and the
-   first 10 words.
+   This crawls the configured folder, indexes every matching file, and prints
+   the elapsed time, the number of documents indexed, the number of distinct
+   words found, and the first 10 words.
