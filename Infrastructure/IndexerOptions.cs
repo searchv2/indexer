@@ -6,7 +6,9 @@ namespace Indexer.Infrastructure;
 /// </summary>
 public sealed class IndexerOptions
 {
-    public string Folder { get; init; } = "/home/miso/School/apip/seData/medium";
+    public string Folder { get; init; } =
+        Environment.GetEnvironmentVariable("INDEXER_FOLDER")
+        ?? "/home/miso/School/apip/seData/medium";
 
     public IReadOnlyList<string> Extensions { get; init; } = new[] { ".txt" };
 }

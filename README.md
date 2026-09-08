@@ -75,3 +75,18 @@ dotnet build
    This crawls the configured folder, indexes every matching file, and prints
    the elapsed time, the number of documents indexed, the number of distinct
    words found, and the first 10 words.
+
+## Docker
+
+```bash
+docker build -t searchv2-indexer .
+docker run --rm \
+  -v "$PWD/../seData/medium:/data/docs:ro" -v "$PWD/../db:/data/db" \
+  searchv2-indexer
+```
+
+The image sets `INDEXER_FOLDER=/data/docs` and `SEARCH_DB_PATH=/data/db/searchmedium.db`;
+mount the document folder and the shared `db/` directory at those paths. The
+build fetches and packs `SearchUtilities` from GitHub (override the ref with
+`--build-arg SEARCH_UTILITIES_REF=...`). See `../docker-compose.yml` for the
+full local stack.
