@@ -19,11 +19,11 @@ documents/words/occurrences so they can later be searched.
   calling the same method, without touching the domain.
 - `IIndexStore` is the storage port, with two implementations in
   `Infrastructure/Persistence/`:
-  - `SqliteIndexStore` (default) - stores documents, words and occurrences in a
-    local SQLite file (via `Microsoft.Data.Sqlite`), (re)creating the schema on
-    startup. The file lives in `searchv2/db/` (see `SearchDatabase`) and is the
-    same file SearchAPI reads.
-  - `InMemoryIndexStore` - an in-memory stand-in that touches no disk.
+  - `PostgresIndexStore` (default) - stores documents, words and occurrences in
+    PostgreSQL (via `Npgsql`), (re)creating the `document`, `word` and `occ`
+    tables on startup. Words and occurrences are bulk-loaded with binary `COPY`.
+    SearchAPI reads the same database (see `SearchDatabase`).
+  - `InMemoryIndexStore` - an in-memory stand-in that needs no database.
 - `IDocumentSource` is the crawl port; `FileSystemDocumentSource` walks
   `IndexerOptions.Folder` recursively for files matching `IndexerOptions.Extensions`.
 
@@ -35,15 +35,16 @@ Onion architecture; dependencies point inward only:
 |-------|--------|----------|
 | Core | `Core/` | Domain entities (`IndexedDocument`, `SourceDocument`, `IndexStatistics`) and ports (`IIndexStore`, `IDocumentSource`). No framework dependencies. |
 | Application | `Application/` | The `IndexingService` use case and its `IIndexingService` interface. Depends only on Core. |
-| Infrastructure | `Infrastructure/` | Adapters behind the Core ports: `SqliteIndexStore`, `InMemoryIndexStore`, `FileSystemDocumentSource`, `IndexerOptions`, `SearchDatabase`, plus DI wiring. |
+| Infrastructure | `Infrastructure/` | Adapters behind the Core ports: `PostgresIndexStore`, `InMemoryIndexStore`, `FileSystemDocumentSource`, `IndexerOptions`, `SearchDatabase`, plus DI wiring. |
 | Entry point | `Program.cs` | Composition root: builds the DI container and calls `IIndexingService.Reindex()`. |
 
 ## Requirements
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 
-No database server is needed - `SqliteIndexStore` writes a self-contained file to
-`searchv2/db/`.
+- A PostgreSQL database the user can create tables in. In Kubernetes this is
+  the `postgresql-db` Helm release in the `database` namespace (see
+  `../k8s/README.md`); `../docker-compose.yml` starts one for the local stack.
 
 ## Setup
 
@@ -63,9 +64,12 @@ dotnet build
 
 1. Set the folder to index in `Infrastructure/IndexerOptions.cs` (all files
    matching `Extensions`, under `Folder` and its subfolders, are indexed).
-2. Optionally override the SQLite file location with the `SEARCH_DB_PATH`
-   environment variable (default: `searchv2/db/searchmedium.db`), or switch the
-   store in `Infrastructure/DependencyInjection.cs` to `InMemoryIndexStore`.
+2. Point the indexer at PostgreSQL with `SEARCH_DB_CONNECTION` (an Npgsql
+   connection string, default
+   `Host=localhost;Port=5432;Database=searchengine;Username=searcher;Gss Encryption Mode=Disable`)
+   and `SEARCH_DB_PASSWORD`, or switch the store in
+   `Infrastructure/DependencyInjection.cs` to `InMemoryIndexStore`. Each run
+   drops and recreates the index tables.
 3. Run the indexer:
 
    ```bash
@@ -81,12 +85,13 @@ dotnet build
 ```bash
 docker build -t searchv2-indexer .
 docker run --rm \
-  -v "$PWD/../seData/medium:/data/docs:ro" -v "$PWD/../db:/data/db" \
+  -e SEARCH_DB_CONNECTION="Host=<db-host>;Database=searchengine;Username=searcher" \
+  -e SEARCH_DB_PASSWORD=<password> \
+  -v "$PWD/../seData/medium:/data/docs:ro" \
   searchv2-indexer
 ```
 
-The image sets `INDEXER_FOLDER=/data/docs` and `SEARCH_DB_PATH=/data/db/searchmedium.db`;
-mount the document folder and the shared `db/` directory at those paths. The
+The image sets `INDEXER_FOLDER=/data/docs`; mount the document folder there. The
 build fetches and packs `SearchUtilities` from GitHub (override the ref with
 `--build-arg SEARCH_UTILITIES_REF=...`). See `../docker-compose.yml` for the
 full local stack.

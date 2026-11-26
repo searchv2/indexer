@@ -4,9 +4,9 @@ using Indexer.Core.Entities;
 namespace Indexer.Infrastructure.Persistence;
 
 /// <summary>
-/// In-memory stand-in for <see cref="SqliteIndexStore"/>. Writes go into plain collections
-/// so a crawl can be run and observed (document/word counts) without touching disk. Swap
-/// the DI registration in <c>DependencyInjection</c> back to <see cref="SqliteIndexStore"/>
+/// In-memory stand-in for <see cref="PostgresIndexStore"/>. Writes go into plain collections
+/// so a crawl can be run and observed (document/word counts) without a database. Swap
+/// the DI registration in <c>DependencyInjection</c> back to <see cref="PostgresIndexStore"/>
 /// to persist the index for SearchAPI.
 /// </summary>
 public sealed class InMemoryIndexStore : IIndexStore

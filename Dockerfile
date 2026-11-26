@@ -2,8 +2,10 @@
 #
 #   docker build -t searchv2-indexer .
 #   docker run --rm \
-#     -e INDEXER_FOLDER=/data/docs -e SEARCH_DB_PATH=/data/db/searchmedium.db \
-#     -v "$PWD/../seData/medium:/data/docs:ro" -v "$PWD/../db:/data/db" \
+#     -e INDEXER_FOLDER=/data/docs \
+#     -e SEARCH_DB_CONNECTION="Host=<db-host>;Database=searchengine;Username=searcher" \
+#     -e SEARCH_DB_PASSWORD=<password> \
+#     -v "$PWD/../seData/medium:/data/docs:ro" \
 #     searchv2-indexer
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -27,8 +29,8 @@ LABEL org.opencontainers.image.title="searchv2-indexer" \
 WORKDIR /app
 COPY --from=build /app .
 
-# Folder to crawl and where to write the shared SQLite index. Mount both.
-ENV INDEXER_FOLDER=/data/docs \
-    SEARCH_DB_PATH=/data/db/searchmedium.db
+# Folder to crawl; mount it. The PostgreSQL connection comes from SEARCH_DB_CONNECTION
+# and SEARCH_DB_PASSWORD at run time.
+ENV INDEXER_FOLDER=/data/docs
 
 ENTRYPOINT ["dotnet", "indexer.dll"]

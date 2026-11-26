@@ -4,7 +4,7 @@ namespace Indexer.Core.Abstractions;
 
 /// <summary>
 /// The port through which the indexer writes documents, words and word/document
-/// occurrences. Infrastructure supplies the implementation (SQLite, or an in-memory
+/// occurrences. Infrastructure supplies the implementation (PostgreSQL, or an in-memory
 /// stand-in).
 /// </summary>
 public interface IIndexStore

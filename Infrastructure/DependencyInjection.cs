@@ -12,9 +12,9 @@ public static class DependencyInjection
         services.AddSingleton(new IndexerOptions());
         services.AddSingleton<IDocumentSource, FileSystemDocumentSource>();
 
-        // Writes the inverted index to the local SQLite file in searchv2/db that SearchAPI
-        // reads. Swap for InMemoryIndexStore to run a crawl without touching disk.
-        services.AddSingleton<IIndexStore, SqliteIndexStore>();
+        // Writes the inverted index to the PostgreSQL database that SearchAPI reads. Swap for
+        // InMemoryIndexStore to run a crawl without a database.
+        services.AddSingleton<IIndexStore>(_ => new PostgresIndexStore(SearchDatabase.ConnectionString));
         return services;
     }
 }
