@@ -25,4 +25,7 @@ public interface IMessageQueue
 
     /// <summary>The number of messages waiting in <paramref name="queue"/> (not counting unacknowledged ones).</summary>
     Task<int> CountAsync(string queue, CancellationToken cancellationToken);
+
+    /// <summary>The number of workers currently consuming <paramref name="queue"/>.</summary>
+    Task<int> ConsumerCountAsync(string queue, CancellationToken cancellationToken);
 }

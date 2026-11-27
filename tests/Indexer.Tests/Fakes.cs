@@ -10,6 +10,7 @@ internal sealed class FakeQueue : IMessageQueue
     public ConcurrentQueue<(string Queue, object Message)> Published { get; } = new();
     public List<string> Calls { get; } = new();
     public Dictionary<string, int> Counts { get; } = new();
+    public Dictionary<string, int> Consumers { get; } = new();
 
     public Task DeclareAsync(CancellationToken cancellationToken) { Calls.Add("declare"); return Task.CompletedTask; }
     public Task PurgeAsync(string queue, CancellationToken cancellationToken) { Calls.Add($"purge {queue}"); return Task.CompletedTask; }
@@ -26,6 +27,9 @@ internal sealed class FakeQueue : IMessageQueue
 
     public Task<int> CountAsync(string queue, CancellationToken cancellationToken) =>
         Task.FromResult(Counts.GetValueOrDefault(queue));
+
+    public Task<int> ConsumerCountAsync(string queue, CancellationToken cancellationToken) =>
+        Task.FromResult(Consumers.GetValueOrDefault(queue));
 }
 
 internal sealed class FakeWriter : IDocumentWriter

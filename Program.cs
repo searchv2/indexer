@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
 using Indexer.Application;
 using Indexer.Infrastructure;
 
@@ -11,6 +13,16 @@ services.AddApplication();
 services.AddInfrastructure();
 
 await using var provider = services.BuildServiceProvider();
+
+// Metrics go to the OpenTelemetry Collector when OTEL_EXPORTER_OTLP_ENDPOINT is set (Kubernetes); without it
+// (docker compose, a local run) nothing is exported. OTEL_SERVICE_NAME names the role in Grafana. Disposing the
+// provider at the end of the program flushes the last values, which matters for the short-lived pipeline Job.
+using var meterProvider = string.IsNullOrEmpty(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"))
+    ? null
+    : Sdk.CreateMeterProviderBuilder()
+        .AddMeter(IndexerMetrics.MeterName)
+        .AddOtlpExporter()
+        .Build();
 
 // One image, several roles (first argument, or INDEXER_ROLE):
 //   batch      (default) crawl and index in this one process - no message bus needed
@@ -45,6 +57,7 @@ switch (role)
         Console.WriteLine($"Published {result.Published} documents");
         Console.WriteLine($"Indexed {result.Indexed} documents");
         Console.WriteLine($"Failed (dead-lettered) {result.Failed} documents");
+        Console.WriteLine($"Workers: {result.Tokenizers} tokenizers, {result.Writers} writers");
         if (result.Failed > 0)
             return 1;
         break;

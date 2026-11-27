@@ -12,8 +12,8 @@ public sealed record PipelineOptions
     public TimeSpan StallTimeout { get; init; } = TimeSpan.FromMinutes(2);
 }
 
-/// <summary>What a pipeline run did.</summary>
-public sealed record PipelineResult(int Published, int Indexed, int Failed, TimeSpan Elapsed);
+/// <summary>What a pipeline run did, and how many tokenizer and writer workers were connected when it finished.</summary>
+public sealed record PipelineResult(int Published, int Indexed, int Failed, TimeSpan Elapsed, int Tokenizers, int Writers);
 
 /// <summary>
 /// Pipeline stage 1 and the coordinator of a full reindex: resets the index, publishes one
@@ -61,7 +61,14 @@ public sealed class IndexingPipeline
             var failed = await _queue.CountAsync(Queues.Failed, cancellationToken);
             var processed = indexed + failed;
             if (processed >= published)
-                return new PipelineResult(published, indexed, failed, DateTime.UtcNow - start);
+            {
+                var elapsed = DateTime.UtcNow - start;
+                var tokenizers = await _queue.ConsumerCountAsync(Queues.Discovered, cancellationToken);
+                var writers = await _queue.ConsumerCountAsync(Queues.Tokenized, cancellationToken);
+                var result = new PipelineResult(published, indexed, failed, elapsed, tokenizers, writers);
+                IndexerMetrics.RecordRun(result);
+                return result;
+            }
 
             if (processed != lastProcessed)
             {

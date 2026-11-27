@@ -65,6 +65,14 @@ public sealed class RabbitMqQueue : IMessageQueue, IAsyncDisposable
         finally { _gate.Release(); }
     }
 
+    public async Task<int> ConsumerCountAsync(string queue, CancellationToken cancellationToken)
+    {
+        var channel = await GetChannelAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken);
+        try { return (int)(await channel.QueueDeclarePassiveAsync(queue, cancellationToken)).ConsumerCount; }
+        finally { _gate.Release(); }
+    }
+
     public async Task ConsumeAsync<T>(string queue, Func<T, CancellationToken, Task> handler, CancellationToken cancellationToken)
     {
         await using var channel = await (await GetConnectionAsync(cancellationToken)).CreateChannelAsync(cancellationToken: cancellationToken);

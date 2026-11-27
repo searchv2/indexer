@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Indexer.Core.Abstractions;
 using Indexer.Core.Messages;
 
@@ -25,11 +26,21 @@ public sealed class TokenizerWorker
         await _queue.ConsumeAsync<DocumentDiscovered>(Queues.Discovered, HandleAsync, cancellationToken);
     }
 
-    public Task HandleAsync(DocumentDiscovered message, CancellationToken cancellationToken)
+    public async Task HandleAsync(DocumentDiscovered message, CancellationToken cancellationToken)
     {
-        var words = WordExtractor.Extract(_source.Read(message.Url))
-            .Order(StringComparer.Ordinal) // a fixed order keeps concurrent writers from deadlocking on word rows
-            .ToList();
-        return _queue.PublishAsync(Queues.Tokenized, new DocumentTokenized(message.Url, message.CreatedAt, words), cancellationToken);
+        var start = Stopwatch.GetTimestamp();
+        var succeeded = false;
+        try
+        {
+            var words = WordExtractor.Extract(_source.Read(message.Url))
+                .Order(StringComparer.Ordinal) // a fixed order keeps concurrent writers from deadlocking on word rows
+                .ToList();
+            await _queue.PublishAsync(Queues.Tokenized, new DocumentTokenized(message.Url, message.CreatedAt, words), cancellationToken);
+            succeeded = true;
+        }
+        finally
+        {
+            IndexerMetrics.RecordDocument("tokenizer", Stopwatch.GetElapsedTime(start), succeeded);
+        }
     }
 }

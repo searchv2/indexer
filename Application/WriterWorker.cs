@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Indexer.Core.Abstractions;
 using Indexer.Core.Messages;
 
@@ -26,7 +27,17 @@ public sealed class WriterWorker
 
     public Task HandleAsync(DocumentTokenized message, CancellationToken cancellationToken)
     {
-        _writer.Write(message.Url, message.CreatedAt, message.Words.ToHashSet());
+        var start = Stopwatch.GetTimestamp();
+        var succeeded = false;
+        try
+        {
+            _writer.Write(message.Url, message.CreatedAt, message.Words.ToHashSet());
+            succeeded = true;
+        }
+        finally
+        {
+            IndexerMetrics.RecordDocument("writer", Stopwatch.GetElapsedTime(start), succeeded);
+        }
         return Task.CompletedTask;
     }
 }

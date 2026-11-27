@@ -4,6 +4,7 @@ using Indexer.Infrastructure;
 
 namespace Indexer.Tests;
 
+[Collection("Indexer metrics are process-wide")]
 public class PipelineTests
 {
     [Fact]
