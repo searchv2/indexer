@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
 using Indexer.Application;
 using Indexer.Infrastructure;
@@ -9,17 +10,70 @@ var services = new ServiceCollection();
 services.AddApplication();
 services.AddInfrastructure();
 
-using var provider = services.BuildServiceProvider();
+await using var provider = services.BuildServiceProvider();
 
+// One image, several roles (first argument, or INDEXER_ROLE):
+//   batch      (default) crawl and index in this one process - no message bus needed
+//   pipeline   coordinate a reindex through the message bus: reset the index, publish every file, wait for the workers
+//   tokenizer  worker: read a discovered file and extract its words
+//   writer     worker: store a tokenized document in PostgreSQL
 // The console is one way to trigger a crawl. A future "enough documents uploaded" or
-// batch-update trigger would be another adapter calling the same IIndexingService.
-var indexing = provider.GetRequiredService<IIndexingService>();
+// batch-update trigger would be another adapter calling the same use case.
+var role = args.Length > 0 ? args[0] : Environment.GetEnvironmentVariable("INDEXER_ROLE") ?? "batch";
 
-var stats = indexing.Reindex();
+using var shutdown = new CancellationTokenSource();
+using var sigterm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+{
+    context.Cancel = true;
+    shutdown.Cancel();
+});
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true;
+    shutdown.Cancel();
+};
 
-Console.WriteLine($"DONE! used {stats.Elapsed.TotalMilliseconds}");
-Console.WriteLine($"Indexed {stats.DocumentCount} documents");
-Console.WriteLine($"Number of different words: {stats.DistinctWordCount}");
-Console.WriteLine($"The first {stats.SampleWords.Count} is:");
-foreach (var p in stats.SampleWords)
-    Console.WriteLine($"<{p.Key}, {p.Value}>");
+switch (role)
+{
+    case "batch":
+        PrintStatistics(provider.GetRequiredService<IIndexingService>().Reindex());
+        break;
+
+    case "pipeline":
+        var result = await provider.GetRequiredService<IndexingPipeline>().RunAsync(Console.WriteLine, shutdown.Token);
+        Console.WriteLine($"DONE! used {result.Elapsed.TotalMilliseconds}");
+        Console.WriteLine($"Published {result.Published} documents");
+        Console.WriteLine($"Indexed {result.Indexed} documents");
+        Console.WriteLine($"Failed (dead-lettered) {result.Failed} documents");
+        if (result.Failed > 0)
+            return 1;
+        break;
+
+    case "tokenizer":
+        Console.WriteLine("Tokenizer worker started.");
+        await provider.GetRequiredService<TokenizerWorker>().RunAsync(shutdown.Token);
+        Console.WriteLine("Tokenizer worker stopped.");
+        break;
+
+    case "writer":
+        Console.WriteLine("Writer worker started.");
+        await provider.GetRequiredService<WriterWorker>().RunAsync(shutdown.Token);
+        Console.WriteLine("Writer worker stopped.");
+        break;
+
+    default:
+        Console.Error.WriteLine($"Unknown role '{role}'. Use batch, pipeline, tokenizer or writer.");
+        return 2;
+}
+
+return 0;
+
+static void PrintStatistics(Indexer.Core.Entities.IndexStatistics stats)
+{
+    Console.WriteLine($"DONE! used {stats.Elapsed.TotalMilliseconds}");
+    Console.WriteLine($"Indexed {stats.DocumentCount} documents");
+    Console.WriteLine($"Number of different words: {stats.DistinctWordCount}");
+    Console.WriteLine($"The first {stats.SampleWords.Count} is:");
+    foreach (var p in stats.SampleWords)
+        Console.WriteLine($"<{p.Key}, {p.Value}>");
+}

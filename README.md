@@ -27,6 +27,23 @@ documents/words/occurrences so they can later be searched.
 - `IDocumentSource` is the crawl port; `FileSystemDocumentSource` walks
   `IndexerOptions.Folder` recursively for files matching `IndexerOptions.Extensions`.
 
+## Roles: one process, or a pipeline over RabbitMQ
+
+The same image runs in four roles, chosen by the first argument (or `INDEXER_ROLE`):
+
+| Role | What it does |
+| --- | --- |
+| `batch` (default) | The original behaviour: crawl, tokenize and write in this one process. Needs only PostgreSQL. |
+| `pipeline` | Stage 1. Recreates the index, publishes one `DocumentDiscovered` message per file to RabbitMQ and waits until the workers have stored every document (or dead-lettered it). Exits non-zero if any document failed. |
+| `tokenizer` | Stage 2 worker. Reads the file named in a message, extracts its words and publishes `DocumentTokenized`. Any number can run. |
+| `writer` | Stage 3 worker. Stores a tokenized document in PostgreSQL in one idempotent transaction, with database-assigned ids. Any number can run. |
+
+The pipeline settings are `RABBITMQ_HOST`, `RABBITMQ_USER` and `RABBITMQ_PASSWORD` (defaults: `localhost`,
+`guest`, `guest`). A message that a worker cannot process is retried once and then moved to the
+`searchv2.documents.failed` queue. The design, the measurements and the failure tests are in
+`k8s/INDEXING-PIPELINE.md` of the `searchv2` repository. Tests are in `tests/Indexer.Tests`
+(`dotnet test tests/Indexer.Tests`; the PostgreSQL test runs when `SEARCH_DB_TEST_CONNECTION` is set).
+
 ## Architecture
 
 Onion architecture; dependencies point inward only:

@@ -19,21 +19,7 @@ public sealed class PostgresIndexStore : IIndexStore, IDisposable
         _connection = new NpgsqlConnection(connectionString);
         _connection.Open();
 
-        Execute("DROP TABLE IF EXISTS occ");
-        Execute("DROP TABLE IF EXISTS document");
-        Execute("DROP TABLE IF EXISTS word");
-
-        Execute("CREATE TABLE document(id INTEGER PRIMARY KEY, url TEXT, idxTime TEXT, creationTime TEXT)");
-        Execute("CREATE TABLE word(id INTEGER PRIMARY KEY, name TEXT UNIQUE)");
-        Execute("CREATE TABLE occ(wordId INTEGER REFERENCES word(id), docId INTEGER REFERENCES document(id))");
-        Execute("CREATE INDEX word_index ON occ (wordId)");
-        Execute("CREATE INDEX occ_doc ON occ (docId, wordId)");
-    }
-
-    private void Execute(string sql)
-    {
-        using var cmd = new NpgsqlCommand(sql, _connection);
-        cmd.ExecuteNonQuery();
+        IndexSchema.Recreate(_connection);
     }
 
     // Binary COPY sends all rows in one stream instead of one round trip per row.

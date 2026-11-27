@@ -15,6 +15,11 @@ public static class DependencyInjection
         // Writes the inverted index to the PostgreSQL database that SearchAPI reads. Swap for
         // InMemoryIndexStore to run a crawl without a database.
         services.AddSingleton<IIndexStore>(_ => new PostgresIndexStore(SearchDatabase.ConnectionString));
+
+        // The pipeline: a message bus between the stages and a writer that lets the database assign ids.
+        services.AddSingleton(new RabbitMqOptions());
+        services.AddSingleton<IMessageQueue, RabbitMqQueue>();
+        services.AddSingleton<IDocumentWriter>(_ => new PostgresDocumentWriter(SearchDatabase.ConnectionString));
         return services;
     }
 }

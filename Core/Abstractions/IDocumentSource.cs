@@ -10,4 +10,10 @@ public interface IDocumentSource
 {
     /// <summary>Every document currently available to index, streamed lazily.</summary>
     IEnumerable<SourceDocument> EnumerateDocuments();
+
+    /// <summary>Every document available to index, without reading its content (used by the crawler stage).</summary>
+    IEnumerable<DocumentReference> EnumerateReferences();
+
+    /// <summary>Reads the text of one document found by <see cref="EnumerateReferences"/> (used by the tokenizer stage).</summary>
+    string Read(string url);
 }

@@ -8,6 +8,10 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddTransient<IIndexingService, IndexingService>();
+        services.AddSingleton(new PipelineOptions());
+        services.AddTransient<IndexingPipeline>();
+        services.AddTransient<TokenizerWorker>();
+        services.AddTransient<WriterWorker>();
         return services;
     }
 }

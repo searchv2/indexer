@@ -1,4 +1,3 @@
-using Shared;
 using Indexer.Core.Abstractions;
 using Indexer.Core.Entities;
 
@@ -40,7 +39,7 @@ public sealed class IndexingService : IIndexingService
             };
             _store.InsertDocument(doc);
 
-            var wordsInDoc = ExtractWords(source.Content);
+            var wordsInDoc = WordExtractor.Extract(source.Content);
 
             var newWords = new Dictionary<string, int>();
             foreach (var word in wordsInDoc)
@@ -62,14 +61,5 @@ public sealed class IndexingService : IIndexingService
             SampleWords = all.Take(10).ToList(),
             Elapsed = DateTime.Now - start,
         };
-    }
-
-    // The set of words in [content], NFKC-normalized and case folded.
-    private static ISet<string> ExtractWords(string content)
-    {
-        var res = new HashSet<string>();
-        foreach (var word in Tokenizer.Tokenize(content))
-            res.Add(TextNormalizer.Fold(word));
-        return res;
     }
 }
